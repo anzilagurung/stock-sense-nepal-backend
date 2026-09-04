@@ -1,0 +1,32 @@
+# Render Blueprint — provisions the web service + free Postgres in one shot.
+# Deploy with: Render Dashboard → New → Blueprint → select this repo.
+# Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: nepse-db
+    plan: free
+    # Must match the web service region below. Render's internal Postgres
+    # hostname (dpg-XXXX-a) is region-scoped — cross-region requires the
+    # external hostname, which `connectionString` doesn't return.
+    region: singapore
+
+services:
+  - type: web
+    name: stock-sense-nepal
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    # Python version is pinned via the `.python-version` file at the repo root.
+    # Blueprint envVars are runtime-only, so PYTHON_VERSION there has no effect
+    # on the build phase.
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nepse-db
+          property: connectionString
