@@ -15,6 +15,10 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python run.py
     envVars:
+      # Pin Python: Render's default (3.14) has no prebuilt wheels for pydantic-core
+      # 2.27.2, which forces a Rust build that fails on the sandboxed build image.
+      - key: PYTHON_VERSION
+        value: "3.12.7"
       - key: APP_ENV
         value: production
       - key: CORS_ORIGINS
