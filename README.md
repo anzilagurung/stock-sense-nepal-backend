@@ -160,10 +160,39 @@ Future work: a periodic scheduler (APScheduler / cron) that calls `run_ingestion
 
 ## Connecting the Flutter client
 
-- Windows/desktop/iOS simulator: uses `http://127.0.0.1:8000` automatically.
-- Android emulator: uses `http://10.0.2.2:8000` automatically.
-- Physical Android device on your LAN:
-  ```
-  flutter run --dart-define=API_BASE=http://192.168.x.x:8000
-  ```
-  and make sure the backend is bound to `0.0.0.0` (it already is, via `run.py`).
+The base URL is now **configurable at runtime** from the Settings screen in the
+app — no rebuild needed. On first launch the app uses a sensible default:
+
+- Windows/desktop/iOS simulator: `http://127.0.0.1:8000`.
+- Android emulator: `http://10.0.2.2:8000`.
+- Physical device (phone) on your LAN: open **Settings → Backend URL**,
+  enter your laptop's LAN IP (e.g. `http://192.168.1.10:8000`), tap **Test**,
+  then **Save**. The URL persists across app launches.
+
+You can still override the default at build time with
+`flutter run --dart-define=API_BASE=http://192.168.x.x:8000`.
+
+### Making the backend reachable from your phone
+
+1. **Both devices on the same Wi-Fi network.**
+2. **Backend already binds `0.0.0.0`** via `run.py`, so no code change needed.
+3. **Find your laptop's LAN IP** (the address the phone should call):
+   ```powershell
+   ipconfig | Select-String IPv4
+   ```
+   Pick the one on your Wi-Fi adapter (usually `192.168.x.x` or `10.x.x.x`).
+4. **Allow port 8000 through Windows Firewall** (one-off, run PowerShell as Administrator):
+   ```powershell
+   New-NetFirewallRule -DisplayName "NEPSE backend (dev)" `
+     -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private
+   ```
+   To remove later: `Remove-NetFirewallRule -DisplayName "NEPSE backend (dev)"`.
+5. **Sanity check from the phone's browser** — open
+   `http://<your-laptop-ip>:8000/health`; you should see `{"status":"ok"}`.
+   If that fails, the app can't reach it either — recheck firewall / Wi-Fi.
+6. **In the app**, enter the URL in Settings and hit **Test** → **Save**.
+
+Note: the app uses plain HTTP over LAN. Both platforms are already configured
+to allow cleartext traffic (Android `networkSecurityConfig`, iOS
+`NSAllowsArbitraryLoads`). If you deploy the backend behind HTTPS later,
+tighten these back up.
