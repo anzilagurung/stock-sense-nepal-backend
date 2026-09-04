@@ -5,6 +5,10 @@
 databases:
   - name: nepse-db
     plan: free
+    # Must match the web service region below. Render's internal Postgres
+    # hostname (dpg-XXXX-a) is region-scoped — cross-region requires the
+    # external hostname, which `connectionString` doesn't return.
+    region: singapore
 
 services:
   - type: web
