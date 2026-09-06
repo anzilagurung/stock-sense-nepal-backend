@@ -8,6 +8,7 @@ from app.analysis.rules.base import (
 from app.analysis.rules.commercial_bank import COMMERCIAL_BANK_RULES
 from app.analysis.rules.development_bank import DEVELOPMENT_BANK_RULES
 from app.analysis.rules.finance import FINANCE_RULES
+from app.analysis.rules.hotels_tourism import HOTELS_TOURISM_RULES
 from app.analysis.rules.hydro_power import HYDRO_POWER_RULES
 from app.analysis.rules.life_insurance import LIFE_INSURANCE_RULES
 from app.analysis.rules.manufacturing import MANUFACTURING_RULES
@@ -18,6 +19,7 @@ SECTOR_RULES: dict[str, SectorRules] = {
     "Commercial Banks": COMMERCIAL_BANK_RULES,
     "Development Banks": DEVELOPMENT_BANK_RULES,
     "Finance": FINANCE_RULES,
+    "Hotels And Tourism": HOTELS_TOURISM_RULES,
     "Hydro Power": HYDRO_POWER_RULES,
     "Life Insurance": LIFE_INSURANCE_RULES,
     "Manufacturing And Processing": MANUFACTURING_RULES,
