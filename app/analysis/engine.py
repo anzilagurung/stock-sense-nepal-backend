@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.analysis.rules import get_rules_for_sector
+from app.analysis.rules import SECTOR_RULES, get_rules_for_sector
 from app.analysis.rules.base import (
     Band,
     CategoryDefinition,
@@ -28,6 +28,22 @@ from app.schemas.analysis import (
     ComparisonRow,
     MetricEvaluation,
 )
+
+
+class SectorNotSupportedError(Exception):
+    """Raised when a company's sector has no scoring rules configured yet.
+
+    The API layer translates this into a 501 with a friendly message
+    listing the sectors that are currently supported.
+    """
+
+    def __init__(self, sector: str):
+        self.sector = sector
+        self.supported = sorted(SECTOR_RULES.keys())
+        super().__init__(
+            f"Analysis for sector '{sector}' is not available yet. "
+            f"Currently supported: {', '.join(self.supported)}."
+        )
 
 
 @dataclass
@@ -160,7 +176,7 @@ def _format_value(m: MetricEvaluation) -> str:
 def analyse(snapshot: MetricSnapshot, profile: str = "balanced") -> AnalysisResult:
     rules = get_rules_for_sector(snapshot.sector)
     if rules is None:
-        raise ValueError(f"No sector rules configured for '{snapshot.sector}'")
+        raise SectorNotSupportedError(snapshot.sector)
 
     category_weights = _category_weights(rules, profile)
     evaluations: list[MetricEvaluation] = []

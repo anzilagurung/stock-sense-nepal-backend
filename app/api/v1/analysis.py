@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.analysis.engine import SectorNotSupportedError
 from app.database import get_db
 from app.schemas.analysis import AnalysisResult, ComparisonResult
 from app.services import analysis_service
@@ -23,7 +24,10 @@ def get_analysis(
     profile: str = Query("balanced"),
     db: Session = Depends(get_db),
 ) -> AnalysisResult:
-    result = analysis_service.analyse_symbol(db, symbol, profile=_validate_profile(profile))
+    try:
+        result = analysis_service.analyse_symbol(db, symbol, profile=_validate_profile(profile))
+    except SectorNotSupportedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
     if not result:
         raise HTTPException(status_code=404, detail=f"Company '{symbol}' not found or has no analysable data")
     return result
@@ -38,7 +42,10 @@ def get_comparison(
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     if len(symbol_list) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two symbols to compare")
-    result = analysis_service.compare_symbols(db, symbol_list, profile=_validate_profile(profile))
+    try:
+        result = analysis_service.compare_symbols(db, symbol_list, profile=_validate_profile(profile))
+    except SectorNotSupportedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
     if not result:
         raise HTTPException(status_code=404, detail="Not enough valid companies to compare")
     return result
