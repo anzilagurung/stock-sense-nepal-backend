@@ -26,7 +26,7 @@ async def _safe(coro, errors: list[str], label: str):
         return None
 
 
-def _upsert_prices(db: Session, quotes: list[PriceQuote]) -> int:
+def _upsert_prices(db: Session, quotes: list[PriceQuote], source_name: str) -> int:
     if not quotes:
         return 0
 
@@ -60,7 +60,7 @@ def _upsert_prices(db: Session, quotes: list[PriceQuote]) -> int:
             latest.volume = q.volume or latest.volume
             latest.turnover = q.turnover or latest.turnover
             latest.trades = q.trades or latest.trades
-            latest.source = "nepse_unofficial"
+            latest.source = source_name
         else:
             db.add(MarketPrice(
                 company_id=company.id,
@@ -74,7 +74,7 @@ def _upsert_prices(db: Session, quotes: list[PriceQuote]) -> int:
                 volume=q.volume,
                 turnover=q.turnover,
                 trades=q.trades,
-                source="nepse_unofficial",
+                source=source_name,
             ))
         written += 1
 
@@ -102,7 +102,7 @@ async def run_ingestion(source: NepseDataSource, db: Session) -> FetchReport:
             if q.symbol not in combined or (q.volume or q.turnover):
                 combined[q.symbol] = q
 
-    written = _upsert_prices(db, list(combined.values()))
+    written = _upsert_prices(db, list(combined.values()), source.name)
     duration_ms = int((time.monotonic() - start) * 1000)
 
     return FetchReport(

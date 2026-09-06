@@ -82,19 +82,23 @@ Valid profiles: `balanced`, `quality`, `growth`, `dividend`, `risk`, `valuation`
 ## Ingestion architecture
 
 ```
-              upstream (unofficial NEPSE community API)
-                                │
-                                ▼
-              ┌────────────────────────────────────┐
-              │  NepseUnofficialSource             │  ← app/ingestion/nepse_unofficial.py
-              │  (implements NepseDataSource)      │
-              └────────────┬───────────────────────┘
-                           │  short 8s timeout, always fails soft
-                           ▼
+    ┌──────────────────────────────────────────────────────────┐
+    │  Selectable upstream (NEPSE_UPSTREAM env var)            │
+    │                                                          │
+    │  sharesansar  ← SharesansarSource                        │  ← default
+    │                 scrapes today-share-price (~340 rows)    │
+    │                                                          │
+    │  nepse_unofficial ← NepseUnofficialSource                │  ← fallback
+    │                 community REST API (unreliable)          │
+    └──────────────────────────┬───────────────────────────────┘
+                               │  fail-soft, per-endpoint isolated
+                               ▼
               ┌────────────────────────────────────┐
               │  run_ingestion() runner            │  ← app/ingestion/runner.py
               │  gathers prices/gainers/losers,    │
               │  upserts by (company, trading_date)│
+              │  stamps market_prices.source with  │
+              │  the actual provider name          │
               └────────────┬───────────────────────┘
                            ▼
                      PostgreSQL / SQLite
@@ -111,12 +115,21 @@ Key design decisions:
 
 - **Universe is always available.** The bundled stockmap seed runs even when no upstream is reachable, so the app always shows the full company list. Price data is best-effort on top.
 - **Fail-soft everywhere.** `/admin/refresh/prices` always returns 200. Downstream failures are captured in the response's `errors[]`, not raised as 5xx. Flutter treats an outage as "keep showing current data."
-- **Provider abstraction.** `NepseDataSource` in `app/ingestion/source.py` is a Protocol. Swap providers (an official paid feed later) without touching call sites.
+- **Provider abstraction.** `NepseDataSource` in `app/ingestion/source.py` is a Protocol. Two implementations ship today; swap by setting `NEPSE_UPSTREAM` or `?provider=…` on the refresh endpoint. Adding a new provider (an official paid feed later) is a single new file that implements the same 4 async methods.
 
-### Upstream data source & licensing
+### Upstream data sources
 
-Live prices come from **surajrimal07/NepseAPI-Unofficial** (`https://nepseapi.surajrimal.dev`). Read carefully:
+**Default: Sharesansar scraper** (`app/ingestion/sharesansar.py`).
 
+- Scrapes the fully-server-rendered table at `https://www.sharesansar.com/today-share-price` (~340 traded scrips in a single HTTP fetch, ~3s round-trip).
+- Top gainers / losers / summary are derived from the same parsed page — no additional HTTP calls.
+- Set `NEPSE_UPSTREAM=sharesansar` (or omit — this is the default). Per-call override: `POST /admin/refresh/prices?provider=sharesansar`.
+- Respect the site: one request per refresh, identifies itself with a `User-Agent` linking back to this repo. Do not schedule this on a tight loop; a manual/hourly cadence is appropriate for personal-use analysis.
+- **Not a licensed data feed.** Sharesansar is a public financial-news portal. Their content is publicly readable but they do not offer an API SLA. Any commercial deployment must swap to a licensed provider.
+
+**Fallback: `surajrimal07/NepseAPI-Unofficial`** (`https://nepseapi.surajrimal.dev`), via `NepseUnofficialSource`.
+
+- Set `NEPSE_UPSTREAM=nepse_unofficial` or `?provider=nepse_unofficial`.
 - **Strictly non-commercial** — the upstream project's licence prohibits commercial or production use.
 - **No uptime SLA** — the service is community-run and free. Frequent outages (Cloudflare 522 etc.) are normal. That is exactly why our ingestion is fail-soft and why the bundled stockmap seed is not derived from it at request time.
 - **For any commercial deployment, replace `NepseUnofficialSource` with an official licensed feed** (Nepal Stock Exchange or an authorised data provider).
