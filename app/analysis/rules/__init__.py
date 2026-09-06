@@ -14,6 +14,7 @@ from app.analysis.rules.investment import INVESTMENT_RULES
 from app.analysis.rules.life_insurance import LIFE_INSURANCE_RULES
 from app.analysis.rules.manufacturing import MANUFACTURING_RULES
 from app.analysis.rules.microfinance import MICROFINANCE_RULES
+from app.analysis.rules.mutual_fund import MUTUAL_FUND_RULES
 from app.analysis.rules.non_life_insurance import NON_LIFE_INSURANCE_RULES
 
 SECTOR_RULES: dict[str, SectorRules] = {
@@ -26,6 +27,7 @@ SECTOR_RULES: dict[str, SectorRules] = {
     "Life Insurance": LIFE_INSURANCE_RULES,
     "Manufacturing And Processing": MANUFACTURING_RULES,
     "Microfinance": MICROFINANCE_RULES,
+    "Mutual Fund": MUTUAL_FUND_RULES,
     "Non Life Insurance": NON_LIFE_INSURANCE_RULES,
 }
 
