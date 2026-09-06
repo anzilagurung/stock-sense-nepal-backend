@@ -7,11 +7,13 @@ from app.analysis.rules.base import (
 )
 from app.analysis.rules.commercial_bank import COMMERCIAL_BANK_RULES
 from app.analysis.rules.development_bank import DEVELOPMENT_BANK_RULES
+from app.analysis.rules.finance import FINANCE_RULES
 from app.analysis.rules.hydro_power import HYDRO_POWER_RULES
 
 SECTOR_RULES: dict[str, SectorRules] = {
     "Commercial Banks": COMMERCIAL_BANK_RULES,
     "Development Banks": DEVELOPMENT_BANK_RULES,
+    "Finance": FINANCE_RULES,
     "Hydro Power": HYDRO_POWER_RULES,
 }
 
