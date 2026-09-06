@@ -141,8 +141,15 @@ raw metrics  →  band lookup (rule)  →  metric score (0–100)
 
 Each metric response carries: current value, rating band, benchmark, weight, and a plain-language explanation.
 
+**Human-readable rule reference:** see
+[`app/analysis/rules/METHODOLOGY.md`](app/analysis/rules/METHODOLOGY.md) for a
+plain-English table of every metric, band, threshold, and category weight. Use
+that document when you want to understand or tune the rules without reading
+Python.
+
 To adjust the methodology for Commercial Banks, edit
-`app/analysis/rules/commercial_bank.py`. To add a new sector:
+`app/analysis/rules/commercial_bank.py` (and update `METHODOLOGY.md` to match).
+To add a new sector:
 
 1. Create `app/analysis/rules/<sector>.py` with categories + metrics.
 2. Register it in `app/analysis/rules/__init__.py::SECTOR_RULES`.
