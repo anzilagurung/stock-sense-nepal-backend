@@ -4,11 +4,12 @@ This file describes **what each rating band means** in the analysis engine, so a
 (new developer, curious reader, or future-us tuning the model) can see the rules at a
 glance without reading Python.
 
-> **Source of truth is still the code.** All thresholds below are copied from
-> [`commercial_bank.py`](commercial_bank.py). If you change a number, change it
+> **Source of truth is still the code.** All thresholds below are copied from the
+> per-sector Python files (e.g. [`commercial_bank.py`](commercial_bank.py),
+> [`hydro_power.py`](hydro_power.py)). If you change a number, change it
 > **in the Python file** — this document is a mirror for humans, not for the engine.
 > After changing thresholds, update this file too and bump `methodology_version` in
-> the sector rules (currently `1.0`).
+> the sector rules (currently `1.0` for both sectors).
 
 Contents:
 1. [How scoring works](#how-scoring-works)
@@ -16,7 +17,8 @@ Contents:
 3. [Category weights](#category-weights-balanced-profile)
 4. [Profile overrides](#profile-overrides)
 5. [Sector: Commercial Banks](#sector-commercial-banks) — every metric + bands
-6. [How to change a rule](#how-to-change-a-rule)
+6. [Sector: Hydro Power](#sector-hydro-power) — every metric + bands
+7. [How to change a rule](#how-to-change-a-rule)
 
 ---
 
@@ -272,6 +274,180 @@ _Values shown in **%** unless otherwise noted. Bands are read top→bottom; the 
 
 ---
 
+## Sector: Hydro Power
+
+_Values shown in **%** unless otherwise noted (D/E and interest coverage are **x**). Bands are read top→bottom; the first that contains the value wins._
+
+Hydropower is capital-intensive and project-driven: financials are dominated by leverage during construction, then swing to strong margins and dividends once the plant is commissioned and debt is paid down. Bands reflect that reality rather than mechanically reusing bank thresholds.
+
+### Category weights (balanced profile)
+
+| Category         | Weight | Facet |
+|------------------|-------:|:-----:|
+| Profitability    | 0.20   | Q     |
+| Growth           | 0.15   | Q     |
+| Financial Risk   | 0.20   | Q     |
+| Operations       | 0.10   | Q     |
+| Dividend         | 0.10   | Q     |
+| Valuation        | 0.25   | V     |
+
+### Profile overrides (Hydro Power)
+
+| Category        | balanced | quality | growth | dividend | risk | valuation |
+|-----------------|---------:|--------:|-------:|---------:|-----:|----------:|
+| Profitability   | 0.20     | 0.24    | 0.20   | 0.18     | 0.15 | 0.18      |
+| Growth          | 0.15     | 0.16    | 0.30   | 0.12     | 0.15 | 0.12      |
+| Financial Risk  | 0.20     | 0.22    | 0.15   | 0.15     | 0.30 | 0.15      |
+| Operations      | 0.10     | 0.14    | 0.10   | 0.10     | 0.15 | 0.10      |
+| Dividend        | 0.10     | 0.14    | 0.10   | 0.30     | 0.10 | 0.10      |
+| Valuation       | 0.25     | 0.10    | 0.15   | 0.15     | 0.15 | 0.35      |
+
+### Profitability
+
+#### ROE — Return on Equity  (higher is better, weight 1.0)
+*Mature plants generate strong ROE once project debt is paid down.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 20%        | 100   |
+| Good       | 14% – 20%    | 80    |
+| Fair       | 10% – 14%    | 60    |
+| Weak       | 6% – 10%     | 40    |
+| Very weak  | < 6%         | 20    |
+
+#### ROA — Return on Assets  (higher is better, weight 0.7)
+*Hydropower is asset-heavy, so ROA runs lower than banking. Trend matters more than absolute number.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 8%         | 100   |
+| Good       | 5% – 8%      | 80    |
+| Fair       | 3% – 5%      | 60    |
+| Weak       | 1.5% – 3%    | 40    |
+| Very weak  | < 1.5%       | 20    |
+
+#### Net Profit Margin  (higher is better, weight 0.7)
+*Fuel cost is zero and revenue comes from a fixed PPA tariff — operational plants earn very high margins.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 45%        | 100   |
+| Good       | 30% – 45%    | 80    |
+| Fair       | 20% – 30%    | 60    |
+| Weak       | 10% – 20%    | 40    |
+| Very weak  | < 10%        | 20    |
+
+### Growth
+
+#### Net Profit Growth (YoY)  (higher is better, weight 1.0)
+*Growth comes from tariff revisions, new units, or improved hydrology. Year-to-year swings are normal because of monsoon variance.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 25%        | 100   |
+| Good       | 12% – 25%    | 80    |
+| Fair       | 3% – 12%     | 60    |
+| Weak       | −8% – 3%     | 40    |
+| Very weak  | < −8%        | 20    |
+
+#### EPS Growth (YoY)  (higher is better, weight 0.9)
+*Per-share earnings improvement — matters because bonus/right issues are common.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 20%        | 100   |
+| Good       | 8% – 20%     | 80    |
+| Fair       | 2% – 8%      | 60    |
+| Weak       | −8% – 2%     | 40    |
+| Very weak  | < −8%        | 20    |
+
+### Financial Risk
+
+#### Debt-to-Equity  (lower is better, weight 1.0, unit **x**)
+*Hydro projects are debt-funded, so leverage matters more than in most sectors. Very high D/E raises refinancing risk if hydrology or tariffs disappoint.*
+
+| Band       | Range          | Score |
+|------------|----------------|------:|
+| Excellent  | ≤ 0.8x         | 100   |
+| Good       | 0.8x – 1.5x    | 80    |
+| Fair       | 1.5x – 2.5x    | 60    |
+| Weak       | 2.5x – 3.5x    | 40    |
+| Very weak  | > 3.5x         | 20    |
+
+#### Interest Coverage  (higher is better, weight 0.9, unit **x**)
+*Operating profit ÷ interest expense. Below 1.5x, the company is barely earning enough to service its debt.*
+
+| Band       | Range          | Score |
+|------------|----------------|------:|
+| Excellent  | ≥ 6x           | 100   |
+| Good       | 4x – 6x        | 80    |
+| Fair       | 2.5x – 4x      | 60    |
+| Weak       | 1.5x – 2.5x    | 40    |
+| Very weak  | < 1.5x         | 20    |
+
+### Operations
+
+#### Plant Load Factor  (higher is better, weight 1.0)
+*Fraction of rated capacity actually generated over the year. Nepali run-of-river plants typically sit in the 40–60% range.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 60%        | 100   |
+| Good       | 50% – 60%    | 80    |
+| Fair       | 40% – 50%    | 60    |
+| Weak       | 30% – 40%    | 40    |
+| Very weak  | < 30%        | 20    |
+
+### Dividend
+
+#### Dividend Yield  (higher is better, weight 1.0)
+*Total dividend (cash + bonus) relative to market price. Mature hydros with paid-down debt often pay meaningfully.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 8%         | 100   |
+| Good       | 5% – 8%      | 80    |
+| Fair       | 3% – 5%      | 60    |
+| Weak       | 1% – 3%      | 40    |
+| Very weak  | < 1%         | 20    |
+
+#### Payout Ratio  (higher is better, weight 0.6)
+*Share of earnings paid out as dividend. Newer projects reinvest more (low payout), matured ones return more to shareholders.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≥ 60%        | 100   |
+| Good       | 40% – 60%    | 80    |
+| Fair       | 20% – 40%    | 60    |
+| Weak       | 5% – 20%     | 40    |
+| Very weak  | < 5%         | 20    |
+
+### Valuation
+
+#### P/E Ratio  (lower is better, weight 1.0, unit **x**)
+*Hydropower P/E is often elevated when the market prices in future project completion.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≤ 12x        | 100   |
+| Good       | 12x – 18x    | 80    |
+| Fair       | 18x – 25x    | 60    |
+| Weak       | 25x – 35x    | 40    |
+| Very weak  | > 35x        | 20    |
+
+#### P/B Ratio  (lower is better, weight 1.0, unit **x**)
+*Very high P/B may indicate an optimistically priced expansion story.*
+
+| Band       | Range        | Score |
+|------------|--------------|------:|
+| Excellent  | ≤ 1.2x       | 100   |
+| Good       | 1.2x – 2.0x  | 80    |
+| Fair       | 2.0x – 3.0x  | 60    |
+| Weak       | 3.0x – 4.5x  | 40    |
+| Very weak  | > 4.5x       | 20    |
+
+---
+
 ## How to change a rule
 
 1. Edit the relevant `MetricRule` in [`commercial_bank.py`](commercial_bank.py) —
@@ -300,4 +476,4 @@ _Values shown in **%** unless otherwise noted. Bands are read top→bottom; the 
 
 ---
 
-_Disclaimer: bands are informed by common Nepalese banking norms (NRB CAR floor, typical NPL / ROE / NIM ranges) but are **not** regulatory recommendations. The whole point of this file is that they are easy to tune — treat them as a starting reference and refine as real data accumulates._
+_Disclaimer: bands are informed by common Nepalese sector norms (for banks: NRB CAR floor, typical NPL / ROE / NIM ranges; for hydro: PPA-tariff economics, run-of-river PLF ranges, project-financing leverage) but are **not** regulatory recommendations. The whole point of this file is that they are easy to tune — treat them as a starting reference and refine as real data accumulates._

@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
         # Both seeds are idempotent, so we run them every boot. `seed_universe`
         # upserts every entry in the bundled stockmap — existing rows get their
         # name/sector refreshed, new NEPSE listings are inserted. `seed_sample_financials`
-        # skips any bank that already has a financial_report.
+        # skips any company that already has a financial_report.
         seed_universe(db)
         seed_sample_financials(db)
     yield

@@ -6,10 +6,11 @@ Two stages:
      the upstream data source is unavailable, so the app always has the real company
      list to browse.
 
-  2. `seed_sample_financials(db)` attaches ILLUSTRATIVE financial metrics to five
-     commercial banks so the scoring engine has something to demonstrate. These
-     numbers are NOT real reporting-period values — they exist to exercise the
-     analysis flow end-to-end. Replace with real data before any production use.
+  2. `seed_sample_financials(db)` attaches ILLUSTRATIVE financial metrics to a
+     handful of commercial banks and hydropower companies so the scoring engine
+     has something to demonstrate. These numbers are NOT real reporting-period
+     values — they exist to exercise the analysis flow end-to-end. Replace with
+     real data before any production use.
 
 Both are idempotent: safe to run repeatedly.
 """
@@ -112,18 +113,104 @@ SAMPLE_FINANCIALS: dict[str, dict] = {
 }
 
 
+SAMPLE_FINANCIALS.update({
+    "UPPER": {
+        "price": dict(ltp=98.0, previous_close=97.5, change=0.5, percent_change=0.51,
+                      day_high=99.0, day_low=97.0, week52_high=140.0, week52_low=85.0,
+                      volume=520000, turnover=50_960_000.0, trades=1420, market_cap=105_000_000_000.0),
+        "metrics": {
+            "eps": 5.6, "bvps": 71.0,
+            "roe": 8.2, "roa": 3.1, "net_profit_margin": 34.0,
+            "net_profit_growth": 6.5, "eps_growth": 4.8,
+            "debt_to_equity": 2.4, "interest_coverage": 2.9,
+            "plant_load_factor": 48.0,
+            "dividend_yield": 4.5, "payout_ratio": 55.0,
+        },
+        "dividends": [
+            dict(fiscal_year="2079/80", cash_dividend_percent=4.2, bonus_share_percent=0.2),
+        ],
+    },
+    "CHCL": {
+        "price": dict(ltp=520.0, previous_close=515.0, change=5.0, percent_change=0.97,
+                      day_high=525.0, day_low=512.0, week52_high=690.0, week52_low=470.0,
+                      volume=42000, turnover=21_840_000.0, trades=310, market_cap=44_500_000_000.0),
+        "metrics": {
+            "eps": 36.4, "bvps": 220.0,
+            "roe": 18.5, "roa": 9.8, "net_profit_margin": 52.0,
+            "net_profit_growth": 14.0, "eps_growth": 11.5,
+            "debt_to_equity": 0.6, "interest_coverage": 8.5,
+            "plant_load_factor": 62.0,
+            "dividend_yield": 6.8, "payout_ratio": 70.0,
+        },
+        "dividends": [
+            dict(fiscal_year="2079/80", cash_dividend_percent=25.0, bonus_share_percent=2.0),
+            dict(fiscal_year="2078/79", cash_dividend_percent=22.0, bonus_share_percent=3.0),
+        ],
+    },
+    "API": {
+        "price": dict(ltp=185.0, previous_close=188.0, change=-3.0, percent_change=-1.60,
+                      day_high=190.0, day_low=183.0, week52_high=260.0, week52_low=160.0,
+                      volume=180000, turnover=33_300_000.0, trades=610, market_cap=14_800_000_000.0),
+        "metrics": {
+            "eps": 8.9, "bvps": 118.0,
+            "roe": 11.2, "roa": 4.6, "net_profit_margin": 28.0,
+            "net_profit_growth": 3.5, "eps_growth": 1.8,
+            "debt_to_equity": 1.7, "interest_coverage": 3.4,
+            "plant_load_factor": 46.0,
+            "dividend_yield": 3.2, "payout_ratio": 35.0,
+        },
+        "dividends": [
+            dict(fiscal_year="2079/80", cash_dividend_percent=3.0, bonus_share_percent=0.5),
+        ],
+    },
+    "AHPC": {
+        "price": dict(ltp=310.0, previous_close=308.0, change=2.0, percent_change=0.65,
+                      day_high=314.0, day_low=306.0, week52_high=420.0, week52_low=270.0,
+                      volume=64000, turnover=19_840_000.0, trades=380, market_cap=8_900_000_000.0),
+        "metrics": {
+            "eps": 18.5, "bvps": 152.0,
+            "roe": 14.2, "roa": 6.8, "net_profit_margin": 41.0,
+            "net_profit_growth": 9.5, "eps_growth": 7.0,
+            "debt_to_equity": 1.1, "interest_coverage": 5.6,
+            "plant_load_factor": 54.0,
+            "dividend_yield": 5.4, "payout_ratio": 50.0,
+        },
+        "dividends": [
+            dict(fiscal_year="2079/80", cash_dividend_percent=9.0, bonus_share_percent=1.0),
+            dict(fiscal_year="2078/79", cash_dividend_percent=8.5, bonus_share_percent=1.5),
+        ],
+    },
+    "AHL": {
+        "price": dict(ltp=245.0, previous_close=248.0, change=-3.0, percent_change=-1.21,
+                      day_high=250.0, day_low=242.0, week52_high=330.0, week52_low=210.0,
+                      volume=41000, turnover=10_045_000.0, trades=220, market_cap=3_800_000_000.0),
+        "metrics": {
+            "eps": 9.2, "bvps": 122.0,
+            "roe": 7.5, "roa": 2.6, "net_profit_margin": 24.0,
+            "net_profit_growth": -4.0, "eps_growth": -6.5,
+            "debt_to_equity": 2.8, "interest_coverage": 1.9,
+            "plant_load_factor": 38.0,
+            "dividend_yield": 1.8, "payout_ratio": 18.0,
+        },
+        "dividends": [
+            dict(fiscal_year="2079/80", cash_dividend_percent=1.5, bonus_share_percent=0.0),
+        ],
+    },
+})
+
+
 def _unit_for(key: str) -> str:
     if key in {"eps", "bvps", "distributable_profit_per_share"}:
         return "Rs"
-    if key in {"pe", "pb"}:
+    if key in {"pe", "pb", "debt_to_equity", "interest_coverage"}:
         return "x"
     return "%"
 
 
 def seed_sample_financials(db: Session) -> dict[str, int]:
-    """Attach illustrative financials to the sample banks. Idempotent.
+    """Attach illustrative financials to the sample companies. Idempotent.
 
-    Idempotency: skip a bank if it already has any financial_report row.
+    Idempotency: skip a company if it already has any financial_report row.
     """
     attached = 0
     for symbol, payload in SAMPLE_FINANCIALS.items():
@@ -170,7 +257,7 @@ def seed_sample_financials(db: Session) -> dict[str, int]:
         attached += 1
 
     db.commit()
-    return {"sample_banks_attached": attached}
+    return {"sample_companies_attached": attached}
 
 
 # Backwards-compat name used by main.py before this refactor.
