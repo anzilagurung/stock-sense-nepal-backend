@@ -227,7 +227,7 @@ PROFILE_OVERRIDES: dict[str, dict[str, float]] = {
 
 TRADINGS_RULES = SectorRules(
     sector="Tradings",
-    methodology_version="1.0",
+    methodology_version="2.0",
     categories=CATEGORIES,
     metrics=METRICS,
     profile_weight_overrides=PROFILE_OVERRIDES,

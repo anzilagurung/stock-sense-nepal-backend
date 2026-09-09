@@ -9,7 +9,13 @@ glance without reading Python.
 > [`hydro_power.py`](hydro_power.py)). If you change a number, change it
 > **in the Python file** — this document is a mirror for humans, not for the engine.
 > After changing thresholds, update this file too and bump `methodology_version` in
-> the sector rules (currently `1.0` for both sectors).
+> the sector rules (currently `2.0` for all sectors).
+
+> **v2.0 note.** This file documents only the per-sector *band thresholds* — Layer 1
+> of the engine. Everything else (red flags, verdict tiers, stability, trajectory,
+> peer percentiles) is engine-level and lives in the top-level
+> [`RATING_METHODOLOGY.md`](../../../../RATING_METHODOLOGY.md) of the Flutter app.
+> The engine version is tracked separately as `engine_version` in the API response.
 
 Contents:
 1. [How scoring works](#how-scoring-works)

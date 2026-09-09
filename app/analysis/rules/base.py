@@ -7,11 +7,19 @@ values are better. The engine reads these — no hard-coded if/elif per metric.
 Weights within a category do not need to sum to any particular number; they are normalised
 inside the category. Category weights should ideally sum to 1.0 but the engine will normalise
 them defensively.
+
+Methodology v2.0 adds three declarative extensions used by the verdict/red-flag layer
+(not the raw score, which stays a pure sector-band roll-up):
+
+* ``RedFlag`` — hard-stop conditions per sector (e.g. NPL > 7% for banks).
+* ``StabilityCriteria`` — thresholds for the Blue Chip / Established / Emerging tiers.
+* ``critical_metric_keys`` — metrics whose absence should drop data completeness meaningfully.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Callable
 
 
 class Direction(str, Enum):
@@ -61,6 +69,41 @@ class CategoryDefinition:
     facet: str = "quality"   # "quality" or "valuation" — for the quality/valuation split
 
 
+# --- Verdict / red-flag / stability primitives -------------------------------
+
+RedFlagSeverity = str  # "caution" | "avoid" | "insufficient_data"
+
+
+@dataclass(frozen=True)
+class RedFlag:
+    """A hard-stop rule that caps the verdict tier when triggered.
+
+    The condition is a callable so cross-metric rules (e.g. "cheap P/E AND poor quality")
+    can be expressed. The message shown to the user is the ``explanation`` field.
+
+    ``severity`` controls how the verdict engine caps the tier:
+    * ``avoid`` — verdict cannot rise above "Avoid"
+    * ``caution`` — verdict cannot rise above "Caution"
+    * ``insufficient_data`` — verdict is forced to "Insufficient Data"
+    """
+    key: str
+    display_name: str
+    severity: RedFlagSeverity
+    condition: Callable[[dict[str, float | None]], bool]
+    explanation: str
+
+
+@dataclass(frozen=True)
+class StabilityCriteria:
+    """Thresholds used by the stability classifier for a specific tier."""
+    tier: str                       # "blue_chip" | "established" | "emerging"
+    min_years_listed: int | None = None
+    min_dividend_streak_years: int | None = None
+    min_average_roe: float | None = None
+    min_market_cap_percentile: int | None = None   # 0-100 within sector
+    min_data_completeness: float | None = None     # 0-1
+
+
 @dataclass(frozen=True)
 class SectorRules:
     sector: str
@@ -69,6 +112,15 @@ class SectorRules:
     metrics: tuple[MetricRule, ...]
     profile_weight_overrides: dict[str, dict[str, float]] = field(default_factory=dict)
     """profile_weight_overrides["growth"]["growth"] = 0.40 style overrides."""
+
+    red_flags: tuple[RedFlag, ...] = ()
+    """Sector-specific red flags. Empty tuple means only universal flags apply."""
+
+    critical_metric_keys: tuple[str, ...] = ()
+    """Metrics whose absence is treated as materially incomplete data."""
+
+    stability_criteria: tuple[StabilityCriteria, ...] = ()
+    """Thresholds for the Blue Chip / Established / Emerging classification."""
 
     def category(self, key: str) -> CategoryDefinition | None:
         for c in self.categories:
@@ -93,3 +145,23 @@ def rating_from_score(score: float) -> str:
     if score >= 40:
         return "weak"
     return "very_weak"
+
+
+# --- Verdict tier ordering (weakest first, strongest last) ------------------
+
+VERDICT_TIERS = (
+    "insufficient_data",
+    "avoid",
+    "caution",
+    "watchlist",
+    "hold",
+    "buy_candidate",
+    "strong_buy_candidate",
+)
+
+
+def cap_verdict(current: str, ceiling: str) -> str:
+    """Return the weaker of two verdict tiers."""
+    if current not in VERDICT_TIERS or ceiling not in VERDICT_TIERS:
+        return current
+    return current if VERDICT_TIERS.index(current) <= VERDICT_TIERS.index(ceiling) else ceiling
