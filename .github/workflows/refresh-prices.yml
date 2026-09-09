@@ -1,0 +1,54 @@
+name: Refresh NEPSE prices
+
+# NEPSE trades Sun-Thu, 10:00-15:00 NPT. NPT is UTC+5:45, so trading maps to
+# 04:15-09:15 UTC. We hit /admin/refresh/prices every 30 minutes across that
+# window with a small buffer either side (04:00-09:30 UTC). GitHub's cron
+# uses UTC and days-of-week where 0 = Sunday. NEPSE's Sun-Thu = cron 0-4.
+#
+# The refresh endpoint upserts one row per (company, trading_date), so
+# multiple runs on the same day are cheap — they just refresh the day's
+# LTP/volume in-place. We also wake Render's free-tier web service which
+# would otherwise sleep after 15 minutes of inactivity.
+
+on:
+  schedule:
+    - cron: "*/30 4-9 * * 0-4"
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Data source override"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "sharesansar"
+          - "nepse_unofficial"
+
+concurrency:
+  group: refresh-prices
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit /admin/refresh/prices
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://stock-sense-nepal.onrender.com' }}
+          PROVIDER: ${{ github.event.inputs.provider }}
+        run: |
+          set -euo pipefail
+          url="${BACKEND_URL%/}/api/v1/admin/refresh/prices"
+          if [ -n "${PROVIDER:-}" ]; then
+            url="${url}?provider=${PROVIDER}"
+          fi
+          echo "POST ${url}"
+          # --max-time keeps us bounded even when Render's free tier is cold-
+          # starting; -f fails on 4xx/5xx so the workflow surfaces problems.
+          curl -sSf -X POST --max-time 90 "${url}" | tee response.json
+          echo
+          # Fail if the response says ok=false, so a broken upstream is visible
+          # in the Actions tab instead of silently succeeding.
+          jq -e '.ok == true' response.json > /dev/null
