@@ -44,3 +44,13 @@ class MarketOverview(BaseModel):
     top_losers: list[MarketRow]
     most_traded: list[MarketRow]
     updated_at: datetime
+    # NEPSE-level snapshot. `nepse_index` is a turnover-weighted proxy
+    # (baseline * (1 + weighted_change)) rather than the true NRB-published
+    # index — labelled as an estimate in the client. `nepse_change_percent`
+    # is the turnover-weighted daily change across all traded symbols, which
+    # tracks direction reliably even if the level is approximate.
+    nepse_index: float | None = None
+    nepse_change: float | None = None
+    nepse_change_percent: float | None = None
+    market_status: str = "unknown"  # open / closed / pre_open / unknown
+    market_status_label: str = ""   # human-readable e.g. "Closed — reopens Sun 11:00 NPT"

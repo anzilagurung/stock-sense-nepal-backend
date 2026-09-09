@@ -20,6 +20,25 @@ class TopPickTechnicals(BaseModel):
     percent_change_month: float | None
 
 
+class PriceProjection(BaseModel):
+    """Rule-based forward price track for a pick.
+
+    Not a prediction — a projection built from the stock's own recent
+    momentum and volatility (ATR), damped week-over-week to respect
+    regression-to-mean. Present in the 'shortterm' and 'longterm' buckets
+    only; other buckets omit projections (`None`).
+    """
+    week1_price: float
+    week1_percent: float
+    week2_price: float
+    week2_percent: float
+    week3_price: float
+    week3_percent: float
+    week4_price: float
+    week4_percent: float
+    horizon_note: str  # e.g. "Short-term momentum projection · dampened by ATR"
+
+
 class TopPick(BaseModel):
     symbol: str
     name: str
@@ -31,6 +50,7 @@ class TopPick(BaseModel):
     signal: str   # strong_buy / buy / watch
     reasons: list[str]
     technicals: TopPickTechnicals
+    projection: PriceProjection | None = None
 
 
 class TopPickBucket(BaseModel):

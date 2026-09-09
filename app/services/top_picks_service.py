@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Company, MarketPrice
 from app.schemas.top_picks import (
+    PriceProjection,
     TopPick,
     TopPickBucket,
     TopPickTechnicals,
@@ -353,6 +354,145 @@ def _score_value(s: _Snapshot) -> tuple[float, list[str]] | None:
     return score, reasons
 
 
+def _score_shortterm(s: _Snapshot) -> tuple[float, list[str]] | None:
+    """Rank names suited to a 1–4 week horizon.
+
+    Filters aim to reject stocks that already ran too hard (< 3% off the
+    52-week high often has no room), or that are structurally too volatile
+    to project cleanly. Score rewards trend confirmation, moderate weekly
+    momentum, and volume support.
+    """
+    pw = s.percent_change_week
+    if pw is None:
+        return None
+    # Need a healthy trend or an early up-move to be considered.
+    if s.trend == "downtrend":
+        return None
+    # Skip stocks with a collapsed / one-row 52-week range.
+    if s.week52_high <= s.week52_low * 1.02:
+        return None
+    # No thin-air names — must actually trade.
+    if s.series.prices[-1].turnover <= 0 or s.volume <= 0:
+        return None
+    # If it's already parabolic (up >15% this week) skip — too late to enter.
+    if pw > 15:
+        return None
+    # Need some upside room vs 52-week high — arbitrarily > 3%.
+    if s.distance_from_high_pct is not None and s.distance_from_high_pct < 3:
+        return None
+    # Reject very illiquid names via ATR-pct sanity (extreme volatility ⇒
+    # projection would be meaningless).
+    if s.atr_pct is not None and s.atr_pct > 8:
+        return None
+
+    reasons: list[str] = []
+    score = 0.0
+
+    # Trend anchor.
+    if s.trend == "uptrend":
+        score += 30
+        reasons.append("EMA20 > EMA50 uptrend — direction confirmed")
+    else:
+        score += 12
+        reasons.append("Sideways structure — waiting for continuation")
+
+    # Weekly momentum band: reward 1–8% moves, penalise weakness.
+    if pw >= 1:
+        score += _clip(pw, 0, 8) * 3
+        reasons.append(f"Weekly momentum +{pw:.2f}%")
+    elif pw >= -1:
+        score += 4  # small credit for sideways-not-falling
+    else:
+        return None  # weekly loss disqualifies short-term entry
+
+    # Volume backing.
+    if s.volume_ratio and s.volume_ratio > 1.0:
+        score += _clip((s.volume_ratio - 1) * 12, 0, 18)
+        reasons.append(f"Volume {s.volume_ratio:.1f}x its 20-day average")
+
+    # Room-to-run vs 52-week high.
+    if s.distance_from_high_pct is not None:
+        room = s.distance_from_high_pct
+        if 3 <= room <= 20:
+            score += _clip(20 - room, 0, 15)
+            reasons.append(f"Room to move — {room:.1f}% below 52w high")
+
+    # Prefer moderate volatility (2–5% ATR); punish extremes.
+    if s.atr_pct is not None:
+        if 1.5 <= s.atr_pct <= 5:
+            score += 8
+        elif s.atr_pct < 1.5:
+            score += 3  # too tight, weaker projected move
+        else:
+            score -= 5
+
+    return score, reasons
+
+
+def _score_longterm(s: _Snapshot) -> tuple[float, list[str]] | None:
+    """Rank names suited to gradual accumulation over months.
+
+    We favour steady up-trending stocks with low-to-moderate volatility,
+    consistent uptrend structure, at least modest 1-month strength, and a
+    price that hasn't collapsed toward the 52-week low. This is a
+    technical proxy for "quality accumulation candidate" — the Analysis
+    screen still has the final fundamental say.
+    """
+    if s.trend != "uptrend":
+        return None
+    if s.week52_high <= s.week52_low * 1.02:
+        return None
+    if s.series.prices[-1].turnover <= 0 or s.volume <= 0:
+        return None
+    # Long-horizon names should be relatively calm.
+    if s.atr_pct is None or s.atr_pct > 5.5:
+        return None
+    # Must be well above the 52-week low (not a falling-knife).
+    if s.distance_from_low_pct is None or s.distance_from_low_pct < 15:
+        return None
+    pm = s.percent_change_month
+    if pm is None or pm < -3:
+        return None  # sliding-hard names don't belong in accumulation
+    # Skip parabolic entries — long-term accumulation prefers pullbacks.
+    if s.distance_from_high_pct is not None and s.distance_from_high_pct < 2:
+        return None
+
+    reasons: list[str] = []
+    score = 40  # base credit for passing filters
+
+    # Uptrend firmness (how far above EMA50).
+    if s.ema50 and s.ltp:
+        above_ema50 = (s.ltp / s.ema50 - 1) * 100
+        if 0 < above_ema50 <= 15:
+            score += _clip(above_ema50, 0, 15)
+            reasons.append(f"Trading {above_ema50:.1f}% above EMA50 — durable uptrend")
+
+    # Monthly performance credit.
+    if pm >= 0:
+        score += _clip(pm, 0, 12) * 1.5
+        reasons.append(f"One-month strength +{pm:.1f}%")
+
+    # Low volatility bonus.
+    if s.atr_pct <= 3:
+        score += 10
+        reasons.append(f"Low volatility (ATR {s.atr_pct:.1f}%) — suits accumulation")
+    elif s.atr_pct <= 5:
+        score += 5
+
+    # Volume presence (need real liquidity for gradual buys).
+    if s.volume_ratio and s.volume_ratio >= 0.8:
+        score += _clip((s.volume_ratio - 0.5) * 6, 0, 12)
+        reasons.append(f"Volume {s.volume_ratio:.1f}x avg — enough liquidity to accumulate")
+
+    # Distance-from-low: reward mid-range names (not too close to top).
+    d_low = s.distance_from_low_pct
+    if 20 <= d_low <= 60:
+        score += 6
+        reasons.append(f"{d_low:.0f}% above 52w low — established recovery")
+
+    return score, reasons
+
+
 _BUCKETS = [
     (
         "day",
@@ -378,7 +518,88 @@ _BUCKETS = [
         "Beaten-down names showing early reversal signs from the low.",
         _score_value,
     ),
+    (
+        "shortterm",
+        "Short-term (1–4 weeks)",
+        "Trend-aligned names with room to run over the next few weeks. "
+        "Projected prices use recent momentum dampened by ATR volatility.",
+        _score_shortterm,
+    ),
+    (
+        "longterm",
+        "Long-term Accumulation",
+        "Steady up-trending names with low-to-moderate volatility — suited to "
+        "adding shares in tranches (5/10/50 at a time) over months.",
+        _score_longterm,
+    ),
 ]
+
+_BUCKETS_WITH_PROJECTION = {"shortterm", "longterm"}
+
+
+def _projection_for(s: _Snapshot, bucket_key: str) -> PriceProjection | None:
+    """Build a 4-week price track for a pick.
+
+    Short-term bucket blends weekly momentum with an ATR-derived expected
+    move, then dampens week-over-week (weeks 2–4 add progressively less)
+    to respect regression-to-mean. Long-term bucket uses a much muter,
+    monthly-anchored trajectory: it exists so the UI can compare, but the
+    numbers are small and clearly framed as "gradual accumulation".
+    """
+    if s.ltp <= 0:
+        return None
+
+    atr_expected_weekly = s.atr_pct * 1.5 if s.atr_pct else 1.5  # ~1σ over a week
+    pw = s.percent_change_week or 0
+    pm = s.percent_change_month or 0
+
+    if bucket_key == "shortterm":
+        # Blend: 40% of last week's move + 30% of ATR-implied weekly move.
+        base_weekly = 0.4 * max(0.0, pw) + 0.3 * atr_expected_weekly
+        base_weekly = _clip(base_weekly, 0.4, 6.0)  # keep projections sane
+        weekly_pcts = [
+            round(base_weekly * 1.0, 2),
+            round(base_weekly * 1.7, 2),
+            round(base_weekly * 2.2, 2),
+            round(base_weekly * 2.6, 2),
+        ]
+        note = (
+            "Short-term projection: 40% of last week's momentum + "
+            "ATR-implied expected move, dampened week over week."
+        )
+    elif bucket_key == "longterm":
+        # Long-term accumulation: convert monthly strength to a small
+        # weekly drift; keep the trajectory shallow (accumulation buyers
+        # don't chase). Floor at 0.3% weekly so it stays informative.
+        monthly = max(0.0, pm) / 4.0  # per-week share of monthly move
+        base_weekly = _clip(0.5 * monthly + 0.15 * atr_expected_weekly, 0.3, 2.5)
+        weekly_pcts = [
+            round(base_weekly * 1.0, 2),
+            round(base_weekly * 1.9, 2),
+            round(base_weekly * 2.7, 2),
+            round(base_weekly * 3.4, 2),
+        ]
+        note = (
+            "Long-term projection: monthly trend + volatility floor, "
+            "shallow by design — good for staged buying, not swing trades."
+        )
+    else:
+        return None
+
+    def px(pct: float) -> float:
+        return round(s.ltp * (1 + pct / 100), 2)
+
+    return PriceProjection(
+        week1_price=px(weekly_pcts[0]),
+        week1_percent=weekly_pcts[0],
+        week2_price=px(weekly_pcts[1]),
+        week2_percent=weekly_pcts[1],
+        week3_price=px(weekly_pcts[2]),
+        week3_percent=weekly_pcts[2],
+        week4_price=px(weekly_pcts[3]),
+        week4_percent=weekly_pcts[3],
+        horizon_note=note,
+    )
 
 
 def _signal(score: float) -> str:
@@ -389,7 +610,14 @@ def _signal(score: float) -> str:
     return "watch"
 
 
-def _to_pick(s: _Snapshot, score: float, reasons: list[str]) -> TopPick:
+def _to_pick(
+    s: _Snapshot, score: float, reasons: list[str], bucket_key: str,
+) -> TopPick:
+    projection = (
+        _projection_for(s, bucket_key)
+        if bucket_key in _BUCKETS_WITH_PROJECTION
+        else None
+    )
     return TopPick(
         symbol=s.series.company.symbol,
         name=s.series.company.name,
@@ -401,6 +629,7 @@ def _to_pick(s: _Snapshot, score: float, reasons: list[str]) -> TopPick:
         signal=_signal(score),
         reasons=reasons,
         technicals=s.technicals,
+        projection=projection,
     )
 
 
@@ -422,7 +651,7 @@ def build_top_picks(db: Session, limit: int = 5) -> TopPicksResponse:
             score, reasons = result
             scored.append((score, reasons, s))
         scored.sort(key=lambda t: t[0], reverse=True)
-        picks = [_to_pick(s, sc, rs) for sc, rs, s in scored[:limit]]
+        picks = [_to_pick(s, sc, rs, key) for sc, rs, s in scored[:limit]]
         buckets.append(TopPickBucket(
             key=key,
             title=title,
